@@ -18,14 +18,14 @@ TRAIN_PATIENTS = [
     '2BB050', '2BB051', '2BB052', '2BB059', '2BB062', '2BB066', '2BB071', '2BB072', 
     '2BB073', '2BB076', '2BB079', '2BB082', '2BB085', '2BB090', '2BB091', '2BB095', 
     '2BB098', '2BB099', '2BB100', '2BB102', '2BB111', '2BB145', '2BB152', '2BB171', 
-    '2BB173', '2BB177', '2BB182', '2BB184', '2BB189', '2BB200', '2BB205', '2BC001', 
-    '2BC002', '2BC006', '2BC010', '2BC011', '2BC012', '2BC013', '2BC015', '2BC017', 
-    '2BC018', '2BC019', '2BC022', '2BC023', '2BC024', '2BC026', '2BC030', '2BC033', 
-    '2BC035', '2BC038', '2BC040', '2BC043', '2BC044', '2BC045', '2BC046', '2BC047', 
-    '2BC048', '2BC049', '2BC050', '2BC051', '2BC055', '2BC057', '2BC059', '2BC060', 
-    '2BC061', '2BC064', '2BC066', '2BC068', '2BC071', '2BC072', '2BC073', '2BC074', 
-    '2BC075', '2BC076', '2BC079', '2BC082', '2BC085', '2BC086', '2BC088', '2BC089', 
-    '2BC090'
+    #'2BB173', '2BB177', '2BB182', '2BB184', '2BB189', '2BB200', '2BB205', '2BC001', 
+    #'2BC002', '2BC006', '2BC010', '2BC011', '2BC012', '2BC013', '2BC015', '2BC017', 
+    #'2BC018', '2BC019', '2BC022', '2BC023', '2BC024', '2BC026', '2BC030', '2BC033', 
+    #'2BC035', '2BC038', '2BC040', '2BC043', '2BC044', '2BC045', '2BC046', '2BC047', 
+    #'2BC048', '2BC049', '2BC050', '2BC051', '2BC055', '2BC057', '2BC059', '2BC060', 
+    #'2BC061', '2BC064', '2BC066', '2BC068', '2BC071', '2BC072', '2BC073', '2BC074', 
+    #'2BC075', '2BC076', '2BC079', '2BC082', '2BC085', '2BC086', '2BC088', '2BC089', 
+    #'2BC090'
 ]
 
 VAL_PATIENTS = [
@@ -86,5 +86,11 @@ def get_parameters():
 
     # 補回主體設定，避免 trainer.py 報錯（預設設為 0）
     parser.add_argument('-s', '--subject', dest='subject', type=int, default=0)
+
+    # Paired vs Unpaired 訓練策略
+    # True（預設）：CBCT/CT 共用同一組 shuffle index，維持配準後的一對一對應（目前做法）
+    # False：CBCT/CT 各自獨立 shuffle，徹底打散對應關係（原論文 Random Shuffling 做法）
+    parser.add_argument('--paired', dest='paired', type=str2bool, default=True,
+                        help="True: paired training (aligned CBCT-CT pairs). False: unpaired/random-shuffled training.")
 
     return parser.parse_args()

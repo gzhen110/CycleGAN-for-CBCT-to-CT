@@ -20,3 +20,17 @@ temp_evaluate.py
 
 # 記錄檔與生成的影像檔案
 log.txt
+Gan_Output_2BA001_001.png
+Gan_Output_2BA011_051.png
+analyzeShape.py
+log_256.txt
+log_288.txt
+log_304.txt
+log_74.txt
+log_pad256.txt
+loss_288.txt
+loss_u288.txt
+progress_288.txt
+progress_u288.txt
+paired_2BA011_055.png
+unpaired_2BA011_055.png

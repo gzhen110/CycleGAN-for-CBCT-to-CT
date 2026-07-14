@@ -7,8 +7,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import tensorflow as tf
 import datetime
-from skimage.metrics import peak_signal_noise_ratio as psnr
-from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import structural_similarity as calculate_ssim
 
 # 靜音 Python 層級的 TensorFlow 警告
 tf.get_logger().setLevel('ERROR')
@@ -130,6 +129,23 @@ def normalize(img):
         return 2.0 * (img - img_min) / (img_max - img_min) - 1.0
     return img * 0.0
 
+def compute_similarity_metrics(sCT_hu, real_CT_hu):
+    """依照 Liang 2019 論文公式計算指標"""
+    # 1. MAE & RMSE
+    mae = np.mean(np.abs(sCT_hu - real_CT_hu))
+    mse = np.mean((sCT_hu - real_CT_hu) ** 2)
+    rmse = np.sqrt(mse)
+
+    # 2. PSNR & SSIM（論文指定動態範圍為 4071）
+    if mse == 0:
+        psnr_val = float('inf')
+    else:
+        psnr_val = 20 * np.log10(4071.0 / rmse)
+
+    ssim_val = calculate_ssim(sCT_hu, real_CT_hu, data_range=4071.0)
+
+    return mae, rmse, ssim_val, psnr_val
+
 # ========================================================
 # 逐一計算指標
 # ========================================================
@@ -177,17 +193,13 @@ for sct_fname in sct_files:
     gt_01   = (realct_resized + 1.0) / 2.0
     pred_01 = (ct_pred + 1.0) / 2.0
 
-    # 計算指標
-    p_val = psnr(gt_01, pred_01, data_range=1.0)
-    s_val = ssim(gt_01, pred_01, data_range=1.0, channel_axis=None)
-
-    # MAE / RMSE 換算回 HU
+    # 還原回 HU 值域
     ct_min, ct_max = np.min(realct_img), np.max(realct_img)
     pred_hu = pred_01 * (ct_max - ct_min) + ct_min
     gt_hu   = gt_01   * (ct_max - ct_min) + ct_min
 
-    m_val = np.mean(np.abs(gt_hu - pred_hu))
-    r_val = np.sqrt(np.mean((gt_hu - pred_hu) ** 2))
+    # 依論文公式計算指標（皆在 HU 值域上計算）
+    m_val, r_val, s_val, p_val = compute_similarity_metrics(pred_hu, gt_hu)
 
     psnr_list.append(p_val)
     ssim_list.append(s_val)
