@@ -42,7 +42,14 @@ class CycleGan(keras.Model):
 
     def train_step(self, batch_data):
         real_s, real_c = batch_data
-        
+
+        # 修正（TF 2.11+ / Keras 2.15）：fit() 讀取 Sequence 時，
+        # 輸入張量的空間維度會變成 None（shape=(None, None, None, 1)），
+        # 而 SelfAttention 的 Reshape 需要靜態的 H、W，因此在這裡明確指定形狀
+        expected_shape = self.c_gen.input_shape   # (None, H, W, 1)
+        real_s = tf.ensure_shape(real_s, expected_shape)
+        real_c = tf.ensure_shape(real_c, expected_shape)
+
         with tf.GradientTape(persistent=True) as tape:
 
             fake_s = self.s_gen(real_c, training=True)
