@@ -4,7 +4,6 @@ from trainer import train
 from validation import testModel
 from DatasetLoader import GANDataGenerator, GANDataGeneratorXY
 import numpy as np
-from Datasetlabels import *
 from config import get_parameters
 
 def main(config):
@@ -23,7 +22,13 @@ def main(config):
         # 修正：原本這裡分成兩個獨立的 if（一個檢查 .index，一個檢查原始路徑），
         # 沒有用 else 串起來，導致「偵測到舊存檔」跟「未偵測到舊存檔」曾經同時被印出。
         # 統一改成一個判斷式，TensorFlow 的 checkpoint 用 .index 檔判斷是否存在即可。
-        if os.path.exists(ckpt_path + '.index'):
+        if config.init_ckpt:
+            # 微調：從指定的預訓練權重開始（例如 ./models/base/epoch_100.ckpt）
+            if not os.path.exists(config.init_ckpt + '.index'):
+                sys.exit(f"找不到預訓練權重：{config.init_ckpt}.index")
+            print(f"微調模式：從預訓練權重 {config.init_ckpt} 開始訓練", file=sys.stderr)
+            resume_ckpt = config.init_ckpt
+        elif os.path.exists(ckpt_path + '.index'):
             print(f"偵測到舊存檔：{ckpt_path}", file=sys.stderr)
             print("將從斷點接續訓練！", file=sys.stderr)
             resume_ckpt = ckpt_path
@@ -36,7 +41,7 @@ def main(config):
         model = train(config, resume_ckpt=resume_ckpt)
 
         # saving model weights (訓練全部完成後儲存最終權重)
-        model.save_weights(config.model_save_path + 'model_weights')
+        model.save_weights(os.path.join(config.model_save_path, 'model_weights'))
 
     else:
         '''

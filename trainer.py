@@ -1,5 +1,6 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# 若外部（例如國網中心的 Slurm）已指定 GPU，就不覆寫；本機預設仍用 GPU 1
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "1")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"   # 關掉 TensorFlow 自己的 C++ 層級日誌（oneDNN / cuBLAS / NUMA 等）
 
 import sys
@@ -7,7 +8,7 @@ import time
 import numpy as np
 import tensorflow as tf
 from DatasetLoader import GANDataGenerator, GANDataGeneratorXY
-from Datasetlabels import *
+from Datasetlabels import get_train_files
 from losses import *
 from generator import Generator
 from discriminator import Discriminator
@@ -119,6 +120,9 @@ class EpochLogger(tf.keras.callbacks.Callback):
 # 主訓練函式
 # ========================================================
 def train(config, resume_ckpt=None):
+    # 依 CLI 的 -d/--dataset 建立檔案清單（不再使用 config.basedir 寫死的路徑）
+    domainA, domainB = get_train_files(config.dataset)
+
     # 修正：使用 GANDataGeneratorXY 讓 CBCT 和 CT 成對輸入
     # paired=config.paired：由 CLI 的 --paired 參數控制 paired / unpaired 訓練策略
     train_gen = GANDataGeneratorXY(
@@ -208,6 +212,10 @@ def train(config, resume_ckpt=None):
     # ========================================================
     # 斷點續傳：若有舊權重則載入
     # ========================================================
+    # 固定亂數種子，讓不同資料集的實驗可以公平比較
+    tf.random.set_seed(config.seed)
+    np.random.seed(config.seed)
+
     if resume_ckpt:
         # 雜訊資訊 -> stderr（進度/紀錄檔），不進 loss 檔
         print(f"\n 正在將斷點權重 {resume_ckpt} 載入至 CycleGAN 模型中...", file=sys.stderr)

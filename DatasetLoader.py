@@ -2,16 +2,13 @@ import sys
 import tensorflow as tf
 import numpy as np
 import os
-import cv2
 
-HU_MIN = -1000.0
-HU_MAX =  3000.0
+PAD_VALUE = -1.0   # 背景值：資料集已套用 mask，身體外為 -1
 
 def _loadNpy_core(path, dim):
     '''
-    核心讀取與歸一化邏輯 — Padding 版本
-    Global 歸一化：固定 HU 範圍 -1000 ~ 3000，所有切片可比
-    尺寸統一：四周補 -1.0（對應空氣 HU 值），原始像素完全不變
+    核心讀取邏輯 — 資料已在前處理階段歸一化到 [-1, 1]，這裡不再做任何數值轉換
+    尺寸統一：四周補 -1.0（與背景相同），原始像素完全不變
     '''
     # 讀取 numpy 檔案
     img = np.load(path).astype(np.float32)
@@ -20,28 +17,36 @@ def _loadNpy_core(path, dim):
     if img.ndim == 3:
         img = img[..., 0]   # (H, W, 1) 或 (H, W, 3) → 取第一個 channel
 
-    # --- Global 歸一化：固定範圍 -1000 ~ 3000 → -1 ~ 1 ---
-    img = np.clip(img, HU_MIN, HU_MAX)
-    img = 2.0 * (img - HU_MIN) / (HU_MAX - HU_MIN) - 1.0
+    # --- 安全檢查：資料必須已經歸一化到 [-1, 1] ---
+    # 若誤用尚未歸一化的資料（例如原始 HU），直接報錯，避免默默訓練出錯誤的模型
+    if img.min() < -1.01 or img.max() > 1.01:
+        raise ValueError(
+            f"{path} 的數值範圍 {img.min():.2f} ~ {img.max():.2f} 不在 [-1, 1]，"
+            f"請確認資料集已完成歸一化"
+        )
 
     # --- Padding 到指定尺寸（原始像素不動）---
     target_h, target_w = dim
     h, w = img.shape
 
-    # 保護性處理：若切片超出 target，先 resize 縮小
+    # 修改：移除原本的 resize 保護（會讓影像變形、內插混合 HU）
+    # 切片超出目標尺寸時直接報錯，請調大 --height / --width（需為 16 的倍數）
     if h > target_h or w > target_w:
-        img = cv2.resize(img, (target_w, target_h))
-    else:
-        pad_top    = (target_h - h) // 2
-        pad_bottom = target_h - h - pad_top
-        pad_left   = (target_w - w) // 2
-        pad_right  = target_w - w - pad_left
-        img = np.pad(
-            img,
-            ((pad_top, pad_bottom), (pad_left, pad_right)),
-            mode='constant',
-            constant_values=-1.0   # -1.0 對應歸一化後的空氣/背景值
+        raise ValueError(
+            f"{path} 的大小 {h}x{w} 超過目標尺寸 {target_h}x{target_w}，"
+            f"請調大 --height / --width"
         )
+
+    pad_top    = (target_h - h) // 2
+    pad_bottom = target_h - h - pad_top
+    pad_left   = (target_w - w) // 2
+    pad_right  = target_w - w - pad_left
+    img = np.pad(
+        img,
+        ((pad_top, pad_bottom), (pad_left, pad_right)),
+        mode='constant',
+        constant_values=PAD_VALUE
+    )
 
     # 增加通道維度 (H, W) -> (H, W, 1)
     img = np.expand_dims(img, axis=-1)
@@ -51,7 +56,7 @@ class GANDataGenerator(tf.keras.utils.Sequence):
     '''
     補回原本缺失的單一資料讀取器 (已適配醫學 NPY 格式)
     '''
-    def __init__(self, data, image_path, batch_size=1, dim=(256, 256), n_channels=1, shuffle=True):
+    def __init__(self, data, image_path, batch_size=1, dim=(304, 304), n_channels=1, shuffle=True):
         self.data = data
         self.image_path = image_path
         self.dim = dim
@@ -101,7 +106,7 @@ class GANDataGeneratorXY(tf.keras.utils.Sequence):
         讓模型純粹依賴 cycle-consistency loss 學習跨模態映射
     '''
     def __init__(self, data_1, data_2, image_path1, image_path2, batch_size=1,
-                 dim=(256, 256), n_channels=1, shuffle=True, paired=True):
+                 dim=(304, 304), n_channels=1, shuffle=True, paired=True):
         self.data_1 = data_1
         self.data_2 = data_2
         self.image_path1 = image_path1
