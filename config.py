@@ -70,8 +70,8 @@ def get_parameters():
     parser.add_argument('-v','--validate', default=None, type=str, help="Path for validation")
 
     # 超參數 (Hyperparameters)
-    # Batch size 對於醫學影像建議先從 1 開始，避免記憶體溢位
-    parser.add_argument('-b', '--batch', dest='batch', type=int, default=1)
+    # Batch size：預設 16（與組員設定一致；H200 顯存足夠）
+    parser.add_argument('-b', '--batch', dest='batch', type=int, default=16)
     parser.add_argument('-a', '--alpha', type=float, default=0.1)
     parser.add_argument('-b1', '--beta1', type=float, default=0.5) # CycleGAN 常用 0.5
     parser.add_argument('-b2', '--beta2', type=float, default=0.999)
@@ -98,5 +98,12 @@ def get_parameters():
                         help="微調用的預訓練權重路徑（不含 .index），例如 ./models/base/epoch_100.ckpt。不給則從頭訓練。")
     parser.add_argument('--seed', type=int, default=42,
                         help="亂數種子，讓不同資料集的實驗可公平比較")
+
+    # History pool（CycleGAN 原論文的 image buffer）：判別器有 50% 機率看過去生成的假影像
+    parser.add_argument('--pool_size', type=int, default=50,
+                        help="History pool 大小，0 代表關閉")
+    # 資料讀取的執行緒數（只影響速度，不影響訓練結果）
+    parser.add_argument('--workers', type=int, default=8,
+                        help="同時讀取資料的執行緒數")
 
     return parser.parse_args()

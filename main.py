@@ -14,34 +14,10 @@ def main(config):
         # 雜訊資訊 -> stderr（進度/紀錄檔），不進 loss 檔
         print("=== 啟動 CycleGAN 訓練模式 ===", file=sys.stderr)
 
-        # 1. 定義我們預期存檔的名稱與路徑 (假設存在 model_save_path 裡)
-        # 注意：如果你使用的是 PyTorch Lightning，存檔通常是 .ckpt 副檔名
-        ckpt_path = os.path.join(config.model_save_path, 'last.ckpt')
-
-        # 2. 檢查是否有舊的存檔
-        # 修正：原本這裡分成兩個獨立的 if（一個檢查 .index，一個檢查原始路徑），
-        # 沒有用 else 串起來，導致「偵測到舊存檔」跟「未偵測到舊存檔」曾經同時被印出。
-        # 統一改成一個判斷式，TensorFlow 的 checkpoint 用 .index 檔判斷是否存在即可。
-        if config.init_ckpt:
-            # 微調：從指定的預訓練權重開始（例如 ./models/base/epoch_100.ckpt）
-            if not os.path.exists(config.init_ckpt + '.index'):
-                sys.exit(f"找不到預訓練權重：{config.init_ckpt}.index")
-            print(f"微調模式：從預訓練權重 {config.init_ckpt} 開始訓練", file=sys.stderr)
-            resume_ckpt = config.init_ckpt
-        elif os.path.exists(ckpt_path + '.index'):
-            print(f"偵測到舊存檔：{ckpt_path}", file=sys.stderr)
-            print("將從斷點接續訓練！", file=sys.stderr)
-            resume_ckpt = ckpt_path
-        else:
-            print("未偵測到舊存檔，將從 Epoch 0 開始全新訓練！", file=sys.stderr)
-            resume_ckpt = None
-
-        # 3. 將存檔路徑傳入 train 函數中
-        # (你需要去 trainer.py 裡面，讓 train() 函數能接收這個參數)
-        model = train(config, resume_ckpt=resume_ckpt)
-
-        # saving model weights (訓練全部完成後儲存最終權重)
-        model.save_weights(os.path.join(config.model_save_path, 'model_weights'))
+        # 接續訓練 / 微調 / 全新訓練的判斷都在 trainer.train() 裡處理：
+        #   model_save_path 有 last.ckpt → 自動接續；否則有 --init_ckpt → 微調；都沒有 → 全新訓練
+        # 訓練結束時 train() 會儲存 model_weights（c_generator 權重）
+        train(config)
 
     else:
         '''
