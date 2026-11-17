@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=eval_ds2
 #SBATCH --account=MST115280
-#SBATCH --partition=dev
+#SBATCH --partition=8gpus
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --time=01:00:00
