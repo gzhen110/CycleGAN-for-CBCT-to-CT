@@ -96,6 +96,8 @@ def main():
     ap.add_argument('--batch', type=int, default=16)
     ap.add_argument('--patients', nargs='*', default=None, help='要評估的病人（預設 config.TEST_PATIENTS）')
     ap.add_argument('--save_npy', action='store_true', help='另存每位病人的 sCT / realCT 3D 體積（HU）')
+    ap.add_argument('--resize_eval', type=int, default=0,
+                    help='評估前把 sCT 與真實 CT 都 resize 到 N×N（例如 512，與組員 A 的評估方式一致）；0 = 原始大小')
     args = ap.parse_args()
 
     patients = args.patients or list(cfg.TEST_PATIENTS)
@@ -146,9 +148,16 @@ def main():
         sct_norm = np.stack(sct_slices)    # (D, H, W)，歸一化空間
         ct_norm = np.stack(ct_slices)
 
+        if args.resize_eval:
+            # 與組員 A 相同：在 N×N（雙線性內插）的影像上計算指標
+            n = args.resize_eval
+            sct_norm = tf.image.resize(sct_norm[..., None], (n, n), method='bilinear').numpy()[..., 0]
+            ct_norm = tf.image.resize(ct_norm[..., None], (n, n), method='bilinear').numpy()[..., 0]
+
         # 檢查：真實 CT 在身體內是否落在 [0, 1]（反歸一化公式的前提）
         body = ct_norm > BODY_THRESHOLD
-        out_of_range.append(float(np.mean((ct_norm > -0.99) & (ct_norm < -0.01))))
+        if not args.resize_eval:   # resize 的內插本來就會在邊界產生 -1~0 的值，不列入檢查
+            out_of_range.append(float(np.mean((ct_norm > -0.99) & (ct_norm < -0.01))))
 
         sct_hu = unnormalize_to_hu(sct_norm)
         ct_hu = unnormalize_to_hu(ct_norm)
@@ -175,7 +184,8 @@ def main():
     for k in keys:
         v = np.array([r[k] for r in rows])
         mean[k], std[k] = float(v.mean()), float(v.std())
-    csv_path = os.path.join(args.out, 'evaluation_3d.csv')
+    csv_name = f'evaluation_3d_resize{args.resize_eval}.csv' if args.resize_eval else 'evaluation_3d.csv'
+    csv_path = os.path.join(args.out, csv_name)
     with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
         w = csv.DictWriter(f, fieldnames=['patient', 'slices'] + keys)
         w.writeheader()
@@ -188,11 +198,14 @@ def main():
         print(f"  {tag:4s}: " + " | ".join(
             f"{m} {mean[f'{m}_{tag}']:.4f} ± {std[f'{m}_{tag}']:.4f}" for m in ('MAE', 'RMSE', 'SSIM', 'PSNR')))
     print(f"結果已存至 {csv_path}")
-    print(f"設定：背景 {BACKGROUND_HU} HU，組織 [{HU_MIN}, {HU_MAX}] HU，Dynamic Range {DATA_RANGE}")
+    print(f"設定：背景 {BACKGROUND_HU} HU，組織 [{HU_MIN}, {HU_MAX}] HU，Dynamic Range {DATA_RANGE}"
+          + (f"，評估前 resize 到 {args.resize_eval}×{args.resize_eval}" if args.resize_eval else "，原始大小"))
 
     # 反歸一化假設檢查
-    frac = float(np.mean(out_of_range))
-    if frac > 0.001:
+    frac = float(np.mean(out_of_range)) if out_of_range else 0.0
+    if not out_of_range:
+        print("（resize 評估：略過反歸一化格式檢查）")
+    elif frac > 0.001:
         print(f"⚠️ 真實 CT 有 {frac:.2%} 的體素介於 -1 與 0 之間，"
               f"資料可能不是「背景 -1、組織 0~1」的格式，反歸一化公式可能不適用，請先確認前處理方式！")
     else:
